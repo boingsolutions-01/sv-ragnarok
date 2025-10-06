@@ -24,7 +24,8 @@
 # 3.5 - 31/07/2018 - Adicionado função para importar automaticamente banco de dados de acordo com o emulador baixado no "sv baixar-emulador"
 # 3.6 - 24/10/2018 - Adicionado função para instalar brAthena Old
 # 3.7 - 29/10/2018 - Otimização e melhorias no código para melhor portabilidade, adição do comando "SV EDITAR" e implementação da primeira função de troca de IP
-
+	# 3.8 - 06/10/2025 - Ligar o servidor diretamente por Screen. Andrey Boing
+	
 # Variáveis de Ambiente - Modificáveis
 
 EMULADOR=/home/emulador           # Coloque aqui o diretório raiz do seu emulador
@@ -273,60 +274,55 @@ importarDB() {
 case $1 in
 
 'ligar')
+    if [[ -d $EMULADOR ]]; then
+        if [[ "$VERIFICA_PROCESSOS" -ge "1" ]]; then
+            echo
+            echo "PRIMEIRAMENTE DESLIGUE O SEU EMULADOR COM '"$0" desligar' ANTES DE LIGAR NOVAMENTE"
+            echo
+        else
+            cd $EMULADOR
 
-	if [[ -d $EMULADOR ]]; then
+            # Inicia cada servidor em sua própria sessão screen
+            screen -dmS login ./login-server
+            screen -dmS char ./char-server
+            screen -dmS map ./map-server
+            # Se houver serviço web, descomente a linha abaixo
+            # screen -dmS web ./start-web.sh
 
-		if [[ "$VERIFICA_PROCESSOS" -ge "1" ]]; then
-			echo
-			echo "PRIMEIRAMENTE DESLIGUE O SEU EMULADOR COM '"$0" desligar' ANTES DE LIGAR NOVAMENTE"
-			echo
-		else
-
-			if [[ -x $EMULADOR/login-server || -x $EMULADOR/char-server || -x $EMULADOR/map-server || -x $EMULADOR/loginserv || -x $EMULADOR/charserv || -x $EMULADOR/mapserv || -x $EMULADOR/login-server_sql || -x $EMULADOR/char-server_sql || -x $EMULADOR/map-server_sql ]]; then
-
-				cd $EMULADOR
-				exec ./login-server &
-				exec ./char-server &
-				exec ./map-server &
-				exec ./loginserv &
-				exec ./charserv &
-				exec ./mapserv &
-				exec ./login-server_sql &
-				exec ./char-server_sql &
-				exec ./map-server_sql &
-			else
-				echo
-				echo "OS ARQUIVOS DO SEU EMULADOR DENTRO DE $EMULADOR NÃO EXISTEM OU NECESSITAM DE PERMISSÕES, USE '"$0" preparar' E DEPOIS COMPILE SEU EMULADOR"
-				echo
-			fi
-		fi
-	else
-		echo
-		echo "O DIRETÓRIO $EMULADOR AINDA NÃO EXISTE"
-		echo
-	fi
-	;;
+            echo
+            echo "Servidores iniciados em sessões separadas:"
+            echo " - login (screen -r login)"
+            echo " - char  (screen -r char)"
+            echo " - map   (screen -r map)"
+            echo
+            echo "Use 'screen -ls' para listar sessões e 'screen -r <nome>' para ver os logs."
+            echo "Para sair sem matar o processo, pressione Ctrl+A depois D."
+        fi
+    else
+        echo
+        echo "O DIRETÓRIO $EMULADOR AINDA NÃO EXISTE"
+        echo
+    fi
+    ;;
 
 'desligar')
-	ps ax | grep -E "login-server|char-server|map-server" | awk '{print $1}' | xargs kill
-	sleep 1
-	echo
-	echo "AGUARDE 2 SEGUNDOS..."
-	sleep 1
-	echo "AGUARDE 1 SEGUNDO..."
-	sleep 1
+    echo "Encerrando processos do emulador..."
 
-	VERIFICA_PROCESSOS2=$(ps aux | grep -E "map-server|login-server|char-server" | grep -v grep | wc -l)
+    # Mata os processos login/char/map
+    ps ax | grep -E "login-server|char-server|map-server" | awk '{print $1}' | xargs kill 2>/dev/null
 
-	if [ "$VERIFICA_PROCESSOS2" -eq "0" ]; then
-		echo
-	else
-		ps ax | grep -E "login-server|char-server|map-server" | awk '{print $1}' | xargs kill -9
-	fi
-	echo
-	echo "O SEU EMULADOR FOI DESLIGADO COM SUCESSO!"
-	echo
-	;;
+    # Fecha as sessões do screen se existirem
+    for sess in login char map web; do
+        if screen -list | grep -q "\.${sess}"; then
+            screen -S $sess -X quit
+            echo "Sessão '$sess' encerrada."
+        fi
+    done
+
+    echo
+    echo "Todos os processos e sessões foram encerrados com sucesso!"
+    echo
+    ;;
 
 'compilar' | 'compilar-autoconf')
 	cd /home/emulador
